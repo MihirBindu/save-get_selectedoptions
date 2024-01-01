@@ -1,3 +1,4 @@
+// Import necessary dependencies
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -11,34 +12,34 @@ import {
   ImageBackground,
 } from "react-native";
 import { getItemByPartitionKey } from "./dynamoDbServicemcq";
-import {
-  saveUsernameToDynamoDB,
-  savePointsToDynamoDB,
-  getItemByUsername,
-  saveLastAttemptedQuestion,
-} from "./dynamoDbService";
+import { getItemByUsername } from "./dynamoDbService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ProgressCircle from "react-native-progress/Circle";
 import { useNavigation } from "@react-navigation/native";
 
+// Define a constant for maximum points
 const MAX_POINTS = 100;
 
 const Level1Screen = ({ route }) => {
+  // Destructure parameters from route
   const { level1Data, username, questionId } = route.params;
   const navigation = useNavigation();
 
+  // State variables
   const [currentId, setCurrentId] = useState(1);
   const [currentQuestion, setCurrentQuestion] = useState(level1Data);
   const [selectedOptions2, setSelectedOptions2] = useState({});
   const [userPoints, setUserPoints] = useState(0);
   const [optionsData, setOptionsData] = useState([]);
 
+  // Define a reusable CircleButton component
   const CircleButton = ({ title, onPress }) => (
     <TouchableOpacity style={styles.circleButton} onPress={onPress}>
       <Text style={styles.circleButtonText}>{title}</Text>
     </TouchableOpacity>
   );
 
+  // Fetch question when component mounts or questionId changes
   useEffect(() => {
     setCurrentId(questionId);
 
@@ -54,12 +55,11 @@ const Level1Screen = ({ route }) => {
     fetchQuestion();
   }, [questionId]);
 
+  // Fetch user points when the component mounts or username changes
   useEffect(() => {
-    console.log("User Points:", userPoints);
     const fetchUserPoints = async () => {
       try {
         const userData = await getItemByUsername(username);
-        console.log("Fetched User Data:", userData);
 
         // Check if the user has previously attempted any questions
         if (userData.level1_lastAttemptedQuestion > 0) {
@@ -67,6 +67,7 @@ const Level1Screen = ({ route }) => {
         } else {
           // Reset the state if the user hasn't attempted any questions
           setUserPoints(0);
+          setSelectedOptions2({});
         }
       } catch (dbError) {
         console.error("Error fetching user data:", dbError.message);
@@ -75,10 +76,13 @@ const Level1Screen = ({ route }) => {
 
     // Fetch user points when the component mounts or when the username changes
     fetchUserPoints();
-  }, [username]); // Ensure that username is included in the dependency array
 
+    // Log the updated value of userPoints
+    console.log("User Points", userPoints);
+  }, [username]);
+
+  // Update optionsData when currentQuestion changes
   useEffect(() => {
-    // Update optionsData when currentQuestion changes
     if (currentQuestion) {
       const updatedOptionsData = [
         currentQuestion.option1,
@@ -91,6 +95,7 @@ const Level1Screen = ({ route }) => {
     }
   }, [currentQuestion]);
 
+  // Render individual options
   const renderOption = ({ item, index }) => {
     const selectedOptionInfo = selectedOptions2[currentId];
 
@@ -112,36 +117,40 @@ const Level1Screen = ({ route }) => {
     );
   };
 
+  // Handle option press
   const handleOptionPress = async (index, selectedAnswer) => {
     if (selectedOptions2[currentId]) {
       return;
     }
 
+    // Check if the selected option is correct
     const isCorrect = selectedAnswer === currentQuestion.correctAnswer;
 
-    // Introduce a delay (e.g., 500 milliseconds) before saving points
+    console.log("Correct Answer Index:", currentQuestion.correctAnswer);
+    console.log("Selected Option Index:", index);
+    console.log("Is Correct:", isCorrect);
+
+    setSelectedOptions2((prevSelectedOptions) => ({
+      ...prevSelectedOptions,
+      [currentId]: {
+        selectedOption: index,
+        isCorrect: isCorrect,
+      },
+    }));
+
+    // Update points if the selected option is correct
+    if (isCorrect) {
+      const updatedPoints = userPoints + 1; // Adjust the points as needed
+      setUserPoints(updatedPoints);
+    }
+
+    // Introduce a delay (e.g., 500 milliseconds) before additional actions
     setTimeout(async () => {
-      if (isCorrect) {
-        const updatedPoints = userPoints + 1;
-        setUserPoints(updatedPoints);
-
-        try {
-          console.log(
-            "Saving points to DynamoDB. Username:",
-            username,
-            "Level: 1",
-            "Points:",
-            updatedPoints
-          );
-
-          await savePointsToDynamoDB(username, updatedPoints, 1); // Assuming level 1
-        } catch (dbError) {
-          console.error("Error saving data to DynamoDB:", dbError.message);
-        }
-      }
+      // You can add more logic here if needed
     }, 500);
   };
 
+  // Handle next question
   const handleNext = async () => {
     const nextId = parseInt(currentId, 10) + 1;
     const nextQuestionId = nextId.toString();
@@ -161,16 +170,16 @@ const Level1Screen = ({ route }) => {
 
       // Introduce a delay (e.g., 500 milliseconds) before saving the last attempted question
       setTimeout(async () => {
-        await saveLastAttemptedQuestion(username, 1, nextId, nextQuestionId); // Assuming level 1, modify the level accordingly
+        // You can add more logic here if needed
+        setCurrentId(nextQuestion.id);
+        setCurrentQuestion(nextQuestion);
       }, 500);
-
-      setCurrentId(nextQuestion.id);
-      setCurrentQuestion(nextQuestion);
     } catch (error) {
       console.error("Error fetching next question:", error.message);
     }
   };
 
+  // Handle previous question
   const handlePrevious = async () => {
     const previousId = parseInt(currentId, 10) - 1;
 
@@ -185,16 +194,10 @@ const Level1Screen = ({ route }) => {
 
         // Introduce a delay (e.g., 500 milliseconds) before saving the last attempted question
         setTimeout(async () => {
-          await saveLastAttemptedQuestion(
-            username,
-            1,
-            previousId,
-            previousQuestion.id
-          ); // Assuming level 1, modify the level accordingly
+          // You can add more logic here if needed
+          setCurrentId(previousQuestion.id);
+          setCurrentQuestion(previousQuestion);
         }, 500);
-
-        setCurrentId(previousQuestion.id);
-        setCurrentQuestion(previousQuestion);
       } catch (error) {
         console.error("Error fetching previous question:", error.message);
       }
@@ -225,7 +228,9 @@ const Level1Screen = ({ route }) => {
                   thickness={8}
                   progress={userPoints / MAX_POINTS}
                   showsText={true}
-                  formatText={() => `Points: ${userPoints}`} // Display the updated user points
+                  formatText={() =>
+                    `Points: ${Math.round((userPoints / MAX_POINTS) * 100)}`
+                  } // Round and display percentage
                 />
               </View>
               <Image
@@ -444,6 +449,12 @@ const styles = StyleSheet.create({
     color: "#fff", // White text color
     fontSize: 16,
     fontWeight: "bold",
+  },
+  correctOption: {
+    backgroundColor: "green",
+  },
+  incorrectOption: {
+    backgroundColor: "red",
   },
 });
 
